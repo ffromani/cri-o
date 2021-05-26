@@ -20,6 +20,7 @@ import (
 	"github.com/cri-o/cri-o/pkg/config"
 	"github.com/cri-o/cri-o/server/metrics"
 	"github.com/cri-o/cri-o/utils"
+	"github.com/cri-o/cri-o/utils/cpuselection"
 	"github.com/fsnotify/fsnotify"
 	json "github.com/json-iterator/go"
 	rspec "github.com/opencontainers/runtime-spec/specs-go"
@@ -29,6 +30,7 @@ import (
 	"golang.org/x/sys/unix"
 	kwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	utilexec "k8s.io/utils/exec"
 )
@@ -250,9 +252,12 @@ func (r *runtimeOCI) StartContainer(ctx context.Context, c *Container) error {
 		return nil
 	}
 
-	if _, err := utils.ExecCmd(
-		r.path, rootFlag, r.root, "start", c.id,
-	); err != nil {
+	name, args := cpuselection.PinnedCommandline(
+		r.getHousekeepingCPUSet(c),
+		r.path,
+		rootFlag, r.root, "start", c.id,
+	)
+	if _, err := utils.ExecCmd(name, args...); err != nil {
 		return err
 	}
 	c.state.Started = time.Now()
@@ -336,7 +341,7 @@ func (r *runtimeOCI) ExecContainer(ctx context.Context, c *Container, cmd []stri
 
 	args := []string{rootFlag, r.root, "exec"}
 	args = append(args, "--process", processFile, c.ID())
-	execCmd := exec.Command(r.path, args...) // nolint: gosec
+	execCmd := cpuselection.PinnedCommand(r.getHousekeepingCPUSet(c), r.path, args...) // nolint: gosec
 	if v, found := os.LookupEnv("XDG_RUNTIME_DIR"); found {
 		execCmd.Env = append(execCmd.Env, fmt.Sprintf("XDG_RUNTIME_DIR=%s", v))
 	}
@@ -460,8 +465,7 @@ func (r *runtimeOCI) ExecSyncContainer(ctx context.Context, c *Container, comman
 		"--exec-process-spec", processFile,
 		"--runtime-arg", fmt.Sprintf("%s=%s", rootFlag, r.root))
 
-	cmd := exec.Command(r.config.Conmon, args...) // nolint: gosec
-
+	cmd := cpuselection.PinnedCommand(r.getHousekeepingCPUSet(c), r.config.Conmon, args...) // nolint: gosec
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
@@ -1222,4 +1226,14 @@ func prepareProcessExec(c *Container, cmd []string, tty bool) (processFile strin
 
 func (c *Container) conmonPidFilePath() string {
 	return filepath.Join(c.bundlePath, "conmon-pidfile")
+}
+
+func (r *runtimeOCI) getHousekeepingCPUSet(c *Container) cpuset.CPUSet {
+	cpus, err := cpuselection.GetHousekeepingCPUSet(c.ID(), c.annotations, c.Spec())
+	if err != nil {
+		// TODO: should we actually abort here?
+		logrus.Warningf("housekeeping CPUs detection (disabled): error %v", err)
+		cpus = cpuset.CPUSet{}
+	}
+	return cpus
 }

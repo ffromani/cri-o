@@ -15,12 +15,12 @@ import (
 	"github.com/cri-o/cri-o/internal/log"
 	"github.com/cri-o/cri-o/internal/oci"
 	crioannotations "github.com/cri-o/cri-o/pkg/annotations"
+	"github.com/cri-o/cri-o/utils/cpuselection"
 	"github.com/opencontainers/runc/libcontainer/cgroups"
 	"github.com/opencontainers/runc/libcontainer/cgroups/systemd"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/kubernetes/pkg/kubelet/cm/cpuset"
 )
 
 const (
@@ -172,15 +172,7 @@ func isContainerRequestWholeCPU(c *oci.Container) bool {
 }
 
 func setCPUSLoadBalancing(c *oci.Container, enable bool, schedDomainDir string) error {
-	lspec := c.Spec().Linux
-	if lspec == nil ||
-		lspec.Resources == nil ||
-		lspec.Resources.CPU == nil ||
-		lspec.Resources.CPU.Cpus == "" {
-		return errors.Errorf("find container %s CPUs", c.ID())
-	}
-
-	cpus, err := cpuset.Parse(lspec.Resources.CPU.Cpus)
+	cpus, err := cpuselection.GetContainerCPUSet(c.ID(), c.Spec())
 	if err != nil {
 		return err
 	}
