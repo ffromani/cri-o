@@ -435,7 +435,7 @@ github.com/emirpasic/gods/trees/binaryheap
 github.com/emirpasic/gods/utils
 # github.com/fatih/color v1.9.0
 github.com/fatih/color
-# github.com/fsnotify/fsnotify v1.4.9
+# github.com/fsnotify/fsnotify v1.5.4
 ## explicit
 github.com/fsnotify/fsnotify
 # github.com/fsouza/go-dockerclient v1.7.2
@@ -931,7 +931,7 @@ golang.org/x/oauth2/internal
 ## explicit
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20210503080704-8803ae5d1324
+# golang.org/x/sys v0.0.0-20220412211240-33da011f77ad
 ## explicit
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
